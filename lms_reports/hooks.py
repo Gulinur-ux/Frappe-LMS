@@ -29,8 +29,11 @@ app_license = "mit"
 # app_include_js = "/assets/lms_reports/js/lms_reports.js"
 
 # include js, css files in header of web template
-# web_include_css = "/assets/lms_reports/css/lms_reports.css"
-web_include_js = "/assets/lms_reports/js/lms_tracker.js"
+web_include_css = "/assets/lms_reports/css/course_progress.css"
+web_include_js = "/assets/lms_reports/js/course_progress_injector.js"
+
+# App-specific JS files
+# app_include_js = "/assets/lms_reports/js/course_progress_injector.js"
 
 # include custom scss in every website theme (without file extension ".scss")
 # website_theme_scss = "lms_reports/public/scss/website"
@@ -139,11 +142,14 @@ role_home_page = {
 
 doc_events = {
 	"LMS Video Watch Duration": {
-		"after_insert": "lms_reports.lms_reports.events.video_tracking.on_video_watch",
-		"on_update": "lms_reports.lms_reports.events.video_tracking.on_video_watch"
+		"after_insert": "lms_reports.events.video_tracking.on_video_watch",
+		"on_update": "lms_reports.events.video_tracking.on_video_watch"
 	},
 	"LMS Quiz Submission": {
-		"after_insert": "lms_reports.lms_reports.events.quiz_tracking.on_quiz_submit"
+		"after_insert": "lms_reports.events.quiz_tracking.on_quiz_submit"
+	},
+	"LMS Course Progress": {
+		"after_insert": "lms_reports.events.video_tracking.on_video_watch"
 	}
 }
 
