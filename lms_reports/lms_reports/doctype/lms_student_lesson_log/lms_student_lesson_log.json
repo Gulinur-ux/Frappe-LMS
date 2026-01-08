@@ -1,0 +1,192 @@
+{
+    "actions": [],
+    "allow_rename": 1,
+    "creation": "2026-01-07 10:20:45.346374",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "student",
+        "student_name",
+        "column_break_1",
+        "course",
+        "chapter",
+        "lesson",
+        "section_break_progress",
+        "completion_percentage",
+        "is_completed",
+        "column_break_2",
+        "video_speed",
+        "watched_duration",
+        "video_total_duration",
+        "last_watched_timestamp",
+        "section_break_quiz",
+        "quiz_attempts",
+        "quiz_best_score",
+        "column_break_3",
+        "quiz_passed_at_attempt",
+        "section_break_history",
+        "watch_history"
+    ],
+    "fields": [
+        {
+            "fieldname": "student",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "in_standard_filter": 1,
+            "label": "Student",
+            "options": "User",
+            "reqd": 1
+        },
+        {
+            "fetch_from": "student.full_name",
+            "fieldname": "student_name",
+            "fieldtype": "Data",
+            "label": "Student Name",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "course",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "in_standard_filter": 1,
+            "label": "Course",
+            "options": "LMS Course",
+            "reqd": 1
+        },
+        {
+            "fieldname": "chapter",
+            "fieldtype": "Link",
+            "label": "Chapter",
+            "options": "Course Chapter"
+        },
+        {
+            "fieldname": "lesson",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "in_standard_filter": 1,
+            "label": "Lesson",
+            "options": "Course Lesson",
+            "reqd": 1
+        },
+        {
+            "fieldname": "section_break_progress",
+            "fieldtype": "Section Break",
+            "label": "Progress Details"
+        },
+        {
+            "fieldname": "completion_percentage",
+            "fieldtype": "Percent",
+            "in_list_view": 1,
+            "label": "Completion Percentage"
+        },
+        {
+            "default": "0",
+            "fieldname": "is_completed",
+            "fieldtype": "Check",
+            "label": "Is Completed"
+        },
+        {
+            "fieldname": "column_break_2",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "video_speed",
+            "fieldtype": "Data",
+            "label": "Video Speed",
+            "description": "Last used video speed (e.g., 1x, 1.5x, 2x)"
+        },
+        {
+            "fieldname": "watched_duration",
+            "fieldtype": "Float",
+            "label": "Watched Duration (sec)",
+            "description": "Total seconds watched"
+        },
+        {
+            "fieldname": "video_total_duration",
+            "fieldtype": "Float",
+            "label": "Video Total Duration (sec)",
+            "description": "Total video length in seconds"
+        },
+        {
+            "fieldname": "last_watched_timestamp",
+            "fieldtype": "Datetime",
+            "label": "Last Watched Timestamp"
+        },
+        {
+            "fieldname": "section_break_quiz",
+            "fieldtype": "Section Break",
+            "label": "Quiz Performance"
+        },
+        {
+            "fieldname": "quiz_attempts",
+            "fieldtype": "Int",
+            "label": "Quiz Attempts",
+            "description": "Number of quiz attempts"
+        },
+        {
+            "fieldname": "quiz_best_score",
+            "fieldtype": "Percent",
+            "label": "Quiz Best Score"
+        },
+        {
+            "fieldname": "column_break_3",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "quiz_passed_at_attempt",
+            "fieldtype": "Int",
+            "label": "Passed at Attempt",
+            "description": "Which attempt number achieved 100%"
+        },
+        {
+            "fieldname": "section_break_history",
+            "fieldtype": "Section Break",
+            "label": "Watch History",
+            "collapsible": 1
+        },
+        {
+            "fieldname": "watch_history",
+            "fieldtype": "Table",
+            "label": "Watch History",
+            "options": "LMS Watch History"
+        }
+    ],
+    "grid_page_length": 50,
+    "index_web_pages_for_search": 1,
+    "links": [],
+    "modified": "2026-01-07 12:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Lms Reports",
+    "name": "LMS Student Lesson Log",
+    "naming_rule": "Expression",
+    "autoname": "format:LSLL-{student}-{lesson}",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "read": 1,
+            "role": "LMS Student"
+        }
+    ],
+    "row_format": "Dynamic",
+    "rows_threshold_for_grid_search": 20,
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 1
+}

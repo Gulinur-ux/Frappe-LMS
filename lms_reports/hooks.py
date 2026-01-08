@@ -30,7 +30,7 @@ app_license = "mit"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/lms_reports/css/lms_reports.css"
-# web_include_js = "/assets/lms_reports/js/lms_reports.js"
+web_include_js = "/assets/lms_reports/js/lms_tracker.js"
 
 # include custom scss in every website theme (without file extension ".scss")
 # website_theme_scss = "lms_reports/public/scss/website"
@@ -60,9 +60,9 @@ app_license = "mit"
 # home_page = "login"
 
 # website user home page (by Role)
-# role_home_page = {
-# 	"Role": "home_page"
-# }
+role_home_page = {
+	"LMS Student": "/courses"
+}
 
 # Generators
 # ----------
@@ -137,13 +137,15 @@ app_license = "mit"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+	"LMS Video Watch Duration": {
+		"after_insert": "lms_reports.lms_reports.events.video_tracking.on_video_watch",
+		"on_update": "lms_reports.lms_reports.events.video_tracking.on_video_watch"
+	},
+	"LMS Quiz Submission": {
+		"after_insert": "lms_reports.lms_reports.events.quiz_tracking.on_quiz_submit"
+	}
+}
 
 # Scheduled Tasks
 # ---------------
