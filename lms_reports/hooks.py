@@ -30,7 +30,10 @@ app_license = "mit"
 
 # include js, css files in header of web template
 web_include_css = "/assets/lms_reports/css/course_progress.css"
-web_include_js = "/assets/lms_reports/js/course_progress_injector.js"
+web_include_js = [
+	"/assets/lms_reports/js/lms_bundle.js",
+	"/assets/lms_reports/js/lesson_locker.js"
+]
 
 # App-specific JS files
 # app_include_js = "/assets/lms_reports/js/course_progress_injector.js"

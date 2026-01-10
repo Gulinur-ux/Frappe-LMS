@@ -7,17 +7,76 @@ from frappe.utils import now_datetime, flt, cint
 from lms.lms.doctype.course_lesson.course_lesson import save_progress
 
 
+@frappe.whitelist(allow_guest=True)
+def get_lesson_from_number(course, lesson_number):
+    """
+    Get lesson name from lesson number (e.g., '1-1' or '1.1').
+    Returns the Course Lesson name.
+    """
+    if not lesson_number:
+        return {"lesson": None}
+    
+    # Parse lesson number (supports both 1-1 and 1.1 formats)
+    parts = lesson_number.replace('.', '-').split('-')
+    if len(parts) != 2:
+        return {"lesson": None}
+    
+    try:
+        chapter_idx = int(parts[0])
+        lesson_idx = int(parts[1])
+    except ValueError:
+        return {"lesson": None}
+    
+    # Get chapter by index
+    chapter_ref = frappe.db.get_value(
+        "Chapter Reference",
+        {"parent": course, "idx": chapter_idx},
+        "chapter"
+    )
+    
+    if not chapter_ref:
+        return {"lesson": None}
+    
+    # Get lesson by index within chapter
+    lesson_ref = frappe.db.get_value(
+        "Lesson Reference",
+        {"parent": chapter_ref, "idx": lesson_idx},
+        "lesson"
+    )
+    
+    return {"lesson": lesson_ref}
+
+
 @frappe.whitelist()
-def track_lesson_watch(lesson, course, video_speed="1x", watched_duration=0, 
-                       video_total_duration=0, start_time=0, end_time=0):
+def track_lesson_watch(course, video_speed="1x", watched_duration=0, 
+                       video_total_duration=0, start_time=0, end_time=0,
+                       lesson=None, lesson_number=None):
     """
     Track student's lesson watching activity including video speed and duration.
     Creates or updates LMS Student Lesson Log with watch history.
+    
+    Args:
+        course: LMS Course name
+        lesson: Course Lesson name (optional if lesson_number is provided)
+        lesson_number: Lesson number like '1-1' (optional if lesson is provided)
+        video_speed: Playback speed (e.g., '1x', '1.5x', '2x')
+        watched_duration: Time watched in seconds
+        video_total_duration: Total video duration in seconds
+        start_time: Video start position
+        end_time: Video end position
     """
     student = frappe.session.user
     
     if student == "Guest":
         frappe.throw(_("Please login to track progress"))
+    
+    # Resolve lesson from lesson_number if not provided
+    if not lesson and lesson_number:
+        result = get_lesson_from_number(course, lesson_number)
+        lesson = result.get("lesson")
+    
+    if not lesson:
+        frappe.throw(_("Lesson not found"))
     
     # Check if log exists
     existing_log = frappe.db.exists(
@@ -37,7 +96,8 @@ def track_lesson_watch(lesson, course, video_speed="1x", watched_duration=0,
         doc.lesson = lesson
 
     doc.video_speed = video_speed
-    doc.watched_duration = flt(doc.watched_duration) + flt(watched_duration)
+    # Use max of current watched and new position (don't keep adding)
+    doc.watched_duration = max(flt(doc.watched_duration), flt(watched_duration))
     doc.video_total_duration = flt(video_total_duration)
     doc.last_watched_timestamp = now_datetime()
     
@@ -210,8 +270,12 @@ def get_course_progress_summary(course, student=None, lesson=None):
         fields=["member", "member_name", "progress", "modified"]
     )
     
-    # Get lesson count
-    lesson_count = frappe.db.count("Course Lesson", {"course": course})
+    # Get ALL lessons for this course in correct order
+    all_lessons = get_course_lessons_ordered(course)
+    lesson_count = len(all_lessons)
+    
+    # Create lesson lookup map
+    lesson_titles = {l["lesson"]: l["title"] for l in all_lessons}
     
     summary = {
         "total_students": len(enrollments),
@@ -220,162 +284,229 @@ def get_course_progress_summary(course, student=None, lesson=None):
     }
     
     for enrollment in enrollments:
+        # Get completion status from standard LMS Course Progress
+        lms_completed = frappe.get_all(
+            "LMS Course Progress",
+            filters={"course": course, "member": enrollment.member, "status": "Complete"},
+            fields=["lesson", "creation"]
+        )
+        lms_completed_map = {c.lesson: c.creation for c in lms_completed}
+        
+        # Get our custom tracking logs
+        custom_logs = frappe.get_all(
+            "LMS Student Lesson Log",
+            filters={"course": course, "student": enrollment.member},
+            fields=["lesson", "completion_percentage", "is_completed", "video_speed", 
+                   "last_watched_timestamp", "quiz_attempts", "quiz_best_score", 
+                   "quiz_passed_at_attempt", "modified"],
+            order_by="last_watched_timestamp desc"
+        )
+        custom_log_map = {l.lesson: l for l in custom_logs}
+        
+        # Calculate completed lessons count using BOTH sources
+        # A lesson is complete if it's in LMS Course Progress OR custom log with is_completed=1
+        completed_count = 0
+        lesson_details = []
+        
+        for lesson_info in all_lessons:
+            lesson_name = lesson_info["lesson"]
+            lesson_title = lesson_info["title"]
+            
+            # Check if completed
+            is_completed = lesson_name in lms_completed_map
+            completion_date = lms_completed_map.get(lesson_name)
+            
+            # Get custom log info if exists
+            custom_log = custom_log_map.get(lesson_name, {})
+            if custom_log and custom_log.get("is_completed"):
+                is_completed = True
+                if not completion_date:
+                    completion_date = custom_log.get("last_watched_timestamp") or custom_log.get("modified")
+            
+            if is_completed:
+                completed_count += 1
+            
+            lesson_detail = {
+                "lesson": lesson_name,
+                "lesson_title": lesson_title,
+                "is_completed": 1 if is_completed else 0,
+                "completion_percentage": 100 if is_completed else (custom_log.get("completion_percentage") or 0),
+                "completion_date": completion_date,
+                "video_speed": custom_log.get("video_speed") or None,
+                "last_watched_timestamp": custom_log.get("last_watched_timestamp"),
+                "quiz_attempts": custom_log.get("quiz_attempts") or 0,
+                "quiz_best_score": custom_log.get("quiz_best_score") or 0,
+                "quiz_passed_at_attempt": custom_log.get("quiz_passed_at_attempt") or 0
+            }
+            lesson_details.append(lesson_detail)
+        
+        # Calculate overall progress (use max of enrollment progress and our calculation)
+        calculated_progress = (completed_count / lesson_count * 100) if lesson_count > 0 else 0
+        overall_progress = max(enrollment.progress or 0, calculated_progress)
+        
         student_data = {
             "student": enrollment.member,
             "student_name": enrollment.member_name,
-            "overall_progress": enrollment.progress,
-            "completion_date": enrollment.modified if enrollment.progress >= 100 else None,
-            "completed_lessons": 0,
-            "lesson_details": []
+            "overall_progress": overall_progress,
+            "completed_lessons": completed_count,
+            "completion_date": enrollment.modified if overall_progress >= 100 else None,
+            "lesson_details": lesson_details
         }
-
-        # If lesson filter is active, get specific lesson log
-        if lesson:
-            log = frappe.db.get_value(
-                "LMS Student Lesson Log",
-                {"course": course, "student": enrollment.member, "lesson": lesson},
-                ["completion_percentage", "is_completed", "video_speed", "last_watched_timestamp"],
-                as_dict=True
-            )
-            
-            completion_date = None
-            if log and log.is_completed:
-                completion_date = frappe.db.get_value("LMS Course Progress", 
-                    {"lesson": lesson, "member": enrollment.member, "status": "Complete"}, "creation")
-
-            student_data["specific_lesson"] = {
-                "name": lesson,
-                "completion_percentage": log.completion_percentage if log else 0,
-                "is_completed": log.is_completed if log else 0,
-                "last_watched": log.last_watched_timestamp if log else None,
-                "completion_date": completion_date
-            }
-            
-            logs = frappe.get_all("LMS Student Lesson Log", filters={"course": course, "student": enrollment.member, "is_completed": 1})
-            student_data["completed_lessons"] = len(logs)
-            
-        else:
-            # Get all lesson logs for this student, ordered by most recent activity
-            logs = frappe.get_all(
-                "LMS Student Lesson Log",
-                filters={"course": course, "student": enrollment.member},
-                fields=["lesson", "completion_percentage", "is_completed", "video_speed", 
-                       "last_watched_timestamp", "quiz_attempts", "quiz_best_score", "modified"],
-                order_by="last_watched_timestamp desc"
-            )
-            
-            # Sync with standard LMS if our logs are missing completion
-            # This handles cases where lesson was completed but our log didn't catch it
-            lms_completed_lessons = frappe.get_all("LMS Course Progress", 
-                filters={"course": course, "member": enrollment.member, "status": "Complete"},
-                fields=["lesson", "creation"]
-            )
-            
-            for lms_l in lms_completed_lessons:
-                # Check if we have a log for this
-                matched_log = next((l for l in logs if l.lesson == lms_l.lesson), None)
-                if not matched_log or not matched_log.is_completed:
-                    # Update or create log
-                    if matched_log:
-                        log_doc = frappe.get_doc("LMS Student Lesson Log", 
-                            {"student": enrollment.member, "lesson": lms_l.lesson})
-                    else:
-                        log_doc = frappe.new_doc("LMS Student Lesson Log")
-                        log_doc.student = enrollment.member
-                        log_doc.course = course
-                        log_doc.lesson = lms_l.lesson
-                        log_doc.chapter = frappe.db.get_value("Course Lesson", lms_l.lesson, "chapter")
-                    
-                    log_doc.is_completed = 1
-                    log_doc.completion_percentage = 100
-                    if not log_doc.last_watched_timestamp:
-                        log_doc.last_watched_timestamp = lms_l.creation
-                    log_doc.save(ignore_permissions=True)
-                    
-                    # Refresh logs list for this student
-                    logs = frappe.get_all(
-                        "LMS Student Lesson Log",
-                        filters={"course": course, "student": enrollment.member},
-                        fields=["lesson", "completion_percentage", "is_completed", "video_speed", 
-                               "last_watched_timestamp", "quiz_attempts", "quiz_best_score", "modified"],
-                        order_by="last_watched_timestamp desc"
-                    )
-            
-            for log in logs:
-                if log.is_completed:
-                    cdate = frappe.db.get_value("LMS Course Progress", 
-                        {"lesson": log.lesson, "member": enrollment.member, "status": "Complete"}, "creation")
-                    # Fallback to last activity or modified if creation is missing
-                    log["completion_date"] = cdate or log.last_watched_timestamp or log.modified
-                else:
-                    log["completion_date"] = None
-
-            student_data["completed_lessons"] = len([l for l in logs if l.is_completed])
-            student_data["lesson_details"] = logs
         
-        # Fallback for legacy data: if 100% completed but 0 lessons tracked, assume all lessons completed
-        if student_data["overall_progress"] >= 100 and student_data["completed_lessons"] == 0:
-            student_data["completed_lessons"] = lesson_count
-            
+        # If specific lesson filter, add that info
+        if lesson:
+            matching_detail = next((d for d in lesson_details if d["lesson"] == lesson), None)
+            if matching_detail:
+                student_data["specific_lesson"] = matching_detail
+        
         summary["students"].append(student_data)
     
     return summary
 
 
+def get_course_lessons_ordered(course):
+    """Get all lessons for a course in correct order."""
+    lessons = []
+    chapters = frappe.get_all(
+        "Chapter Reference",
+        filters={"parent": course},
+        fields=["chapter", "idx"],
+        order_by="idx"
+    )
+    
+    for chapter in chapters:
+        lesson_refs = frappe.get_all(
+            "Lesson Reference",
+            filters={"parent": chapter.chapter},
+            fields=["lesson", "idx"],
+            order_by="idx"
+        )
+        for ref in lesson_refs:
+            title = frappe.db.get_value("Course Lesson", ref.lesson, "title") or ref.lesson
+            lessons.append({
+                "lesson": ref.lesson,
+                "title": title,
+                "chapter_idx": chapter.idx,
+                "lesson_idx": ref.idx
+            })
+    
+    return lessons
+
+
 @frappe.whitelist()
-def check_lesson_access(course, lesson):
+def check_lesson_access(course, lesson=None, lesson_number=None):
     """
     Check if student can access a lesson.
     Returns True if previous lesson is completed or this is the first lesson.
-    
-    Args:
-        course: LMS Course name
-        lesson: Course Lesson name to check access for
     """
     student = frappe.session.user
+    debug_tag = f"Access Check {student} {course} {lesson_number}"
+    debug_logs = []
     
+    def log(msg):
+        debug_logs.append(msg)
+    
+    log(f"Starting check for {student}")
+    
+    # Instructors and Administrators can always access everything
+    roles = frappe.get_roles(student)
+    log(f"User Roles: {roles}")
+    
+    if student == "Administrator" or "Instructor" in roles:
+        log("Access Granted: Admin/Instructor bypass")
+        # frappe.log_error("\n".join(debug_logs), debug_tag)
+        return {"can_access": True}
+
     if student == "Guest":
-        return {"can_access": False, "reason": "Please login"}
+        log("Access Denied: Guest user")
+        frappe.log_error("\n".join(debug_logs), debug_tag)
+        return {"can_access": False, "reason": _("Ushbu darsni ko'rish maqsadida tizimga kiring.")}
     
-    # Get all lessons in order
-    lessons = frappe.get_all(
-        "Course Lesson",
-        filters={"course": course},
-        fields=["name", "chapter"],
-        order_by="creation"
-    )
+    # Get all chapters and lessons in correct order
+    chapters = frappe.get_all("Chapter Reference", 
+                             filters={"parent": course}, 
+                             fields=["chapter", "idx as chapter_idx"], 
+                             order_by="idx",
+                             ignore_permissions=True)
     
-    if not lessons:
+    ordered_lessons = []
+    lesson_map = {}
+    
+    for c in chapters:
+        lessons = frappe.get_all("Lesson Reference", 
+                                filters={"parent": c.chapter}, 
+                                fields=["lesson", "idx as lesson_idx"], 
+                                order_by="idx",
+                                ignore_permissions=True)
+        for l in lessons:
+            ordered_lessons.append(l.lesson)
+            # Support both 1-1 and 1.1 formats
+            key_dash = f"{c.chapter_idx}-{l.lesson_idx}"
+            key_dot = f"{c.chapter_idx}.{l.lesson_idx}"
+            lesson_map[key_dash] = l.lesson
+            lesson_map[key_dot] = l.lesson
+
+    log(f"Order: {ordered_lessons}")
+    log(f"Map: {lesson_map}")
+
+    if not ordered_lessons:
+        log("Access Granted: No lessons found in course")
+        # frappe.log_error("\n".join(debug_logs), debug_tag)
         return {"can_access": True}
+
+    target_lesson = lesson
+    if lesson_number:
+        target_lesson = lesson_map.get(lesson_number)
     
-    # Find current lesson index
-    lesson_index = -1
-    for i, l in enumerate(lessons):
-        if l.name == lesson:
-            lesson_index = i
-            break
-    
-    if lesson_index == -1:
-        return {"can_access": False, "reason": "Lesson not found"}
-    
+    if not target_lesson:
+        log(f"Access Denied: Target lesson not found for {lesson_number}")
+        frappe.log_error("\n".join(debug_logs), debug_tag)
+        return {"can_access": False, "reason": _("Dars topilmadi.")}
+
+    try:
+        current_idx = ordered_lessons.index(target_lesson)
+    except ValueError:
+        log(f"Access Denied: Lesson {target_lesson} not in course {course}")
+        frappe.log_error("\n".join(debug_logs), debug_tag)
+        return {"can_access": False, "reason": _("Dars ushbu kursga tegishli emas.")}
+
+    log(f"Target Index: {current_idx}")
+
     # First lesson is always accessible
-    if lesson_index == 0:
+    if current_idx == 0:
+        log("Access Granted: First lesson")
+        # frappe.log_error("\n".join(debug_logs), debug_tag)
         return {"can_access": True}
+
+    # Check previous lesson completion
+    previous_lesson = ordered_lessons[current_idx - 1]
+    log(f"Previous Lesson: {previous_lesson}")
     
-    # Check if previous lesson is completed
-    previous_lesson = lessons[lesson_index - 1].name
+    # Check both standard and our custom tracking
+    is_completed = frappe.db.get_value("LMS Student Lesson Log", 
+                                     {"student": student, "lesson": previous_lesson}, 
+                                     "is_completed")
+    log(f"Custom Log Completion: {is_completed}")
     
-    is_completed = frappe.db.get_value(
-        "LMS Student Lesson Log",
-        {"student": student, "lesson": previous_lesson},
-        "is_completed"
-    )
-    
+    if not is_completed:
+        is_completed = frappe.db.exists("LMS Course Progress", {
+            "lesson": previous_lesson,
+            "member": student,
+            "status": "Complete"
+        })
+        log(f"Standard Progress Exists: {is_completed}")
+
     if is_completed:
+        log("Access Granted: Previous lesson completed")
+        # frappe.log_error("\n".join(debug_logs), debug_tag)
         return {"can_access": True}
     else:
+        prev_title = frappe.db.get_value("Course Lesson", previous_lesson, "title")
+        log(f"Access Denied: Prerequisite {prev_title} not completed")
+        frappe.log_error("\n".join(debug_logs), debug_tag)
         return {
             "can_access": False, 
-            "reason": f"Please complete the previous lesson first",
-            "previous_lesson": previous_lesson
+            "reason": _("Navbatdagi darsga o'tish uchun avvalgi darsni yakunlang: {0}").format(prev_title),
+            "previous_lesson": previous_lesson,
+            "previous_lesson_title": prev_title
         }
