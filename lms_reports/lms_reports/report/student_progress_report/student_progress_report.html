@@ -1,0 +1,81 @@
+<div class="report-wrapper p-3">
+    {% if (!data || data.length === 0) { %}
+        <div class="text-center p-5 text-muted border rounded bg-white">Ma'lumot topilmadi</div>
+    {% } %}
+
+    {% for (var i=0; i < data.length; i++) { %}
+    {% var row = data[i]; %}
+    
+    <div class="student-item mb-3 border rounded shadow-sm bg-white">
+        <!-- Header: Faqat klasslar orqali JS bog'langan -->
+        <div class="student-row-header toggle-header d-flex align-items-center p-3" style="cursor: pointer;">
+            
+            <div class="student-meta" style="flex: 1;">
+                <div class="student-title font-weight-bold" style="font-size: 16px; color: #1a202c;">{%= row.student_name %}</div>
+                <div class="student-subtitle text-muted small">{%= row.student_email %}</div>
+            </div>
+
+            <div class="student-progress-bar-container mx-4" style="flex: 2;">
+                <div class="d-flex align-items-center">
+                    <div class="progress w-100" style="height: 14px; border-radius: 20px; background-color: #edf2f7;">
+                        <div class="progress-bar bg-warning text-dark font-weight-bold" style="width: {%= row.progress %}%">
+                            {%= row.progress %}%
+                        </div>
+                    </div>
+                    <div class="ml-2 small text-nowrap" style="min-width: 140px; color: #4a5568;">
+                        {%= row.completed_count %} of {%= row.total_lessons %} completed
+                    </div>
+                </div>
+            </div>
+
+            <div class="student-status-info text-right" style="flex: 1;">
+                <span class="text-success small font-weight-bold">
+                    Activity: {%= row.last_activity_display %}
+                </span>
+                <i class="fa fa-chevron-down ml-3 text-muted arrow-icon"></i>
+            </div>
+        </div>
+
+        <!-- Details Body -->
+        <div class="details-body p-3 border-top" style="display: none;">
+            <div class="mb-3 font-weight-bold small text-muted text-uppercase">All Lessons Progress</div>
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm lesson-table">
+                    <thead class="bg-light">
+                        <tr>
+                            <th>Lesson</th>
+                            <th>Progress</th>
+                            <th>Video Speed</th>
+                            <th>Quiz Attempts</th>
+                            <th>Quiz Score</th>
+                            <th>Last Activity</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% row.lessons.forEach(function(lesson) { %}
+                        <tr>
+                            <td>
+                                <div class="font-weight-bold">{%= lesson.lesson %}</div>
+                                <span class="badge {%= lesson.is_completed ? 'badge-success' : 'badge-light border' %}">
+                                    {%= lesson.is_completed ? 'Completed' : 'Not Started' %}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="progress" style="height: 8px; background: #eee;">
+                                    <div class="progress-bar bg-success" style="width: {%= lesson.completion_percentage %}%"></div>
+                                </div>
+                                <small>{%= lesson.completion_percentage %}%</small>
+                            </td>
+                            <td>{%= lesson.video_speed || 'N/A' %}</td>
+                            <td>{%= lesson.quiz_attempts || '-' %}</td>
+                            <td>{%= lesson.quiz_best_score ? lesson.quiz_best_score + '%' : 'N/A' %}</td>
+                            <td>{%= lesson.last_watched_timestamp ? frappe.datetime.comment_when(lesson.last_watched_timestamp) : 'Never' %}</td>
+                        </tr>
+                        {% }); %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% } %}
+</div>

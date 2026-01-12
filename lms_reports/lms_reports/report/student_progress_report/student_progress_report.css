@@ -1,0 +1,51 @@
+.report-wrapper {
+    background-color: #f8f9fa;
+}
+
+.student-item {
+    border: 1px solid #d1d8dd;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.student-row-header {
+    cursor: pointer;
+    transition: background 0.2s;
+    user-select: none;
+}
+
+.student-row-header:hover {
+    background-color: #fcfcfc;
+}
+
+.student-row-header.is-open {
+    background-color: #f1f5f9;
+}
+
+.arrow-icon {
+    transition: transform 0.2s;
+}
+
+.student-row-header.is-open .arrow-icon {
+    transform: rotate(90deg);
+}
+
+.progress-bar.bg-warning {
+    background-color: #ffb822 !important;
+    color: #333;
+    font-size: 10px;
+    font-weight: bold;
+}
+
+.lesson-table thead th {
+    background-color: #f1f3f5;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: #555;
+}
+
+.lesson-table td {
+    font-size: 13px;
+    vertical-align: middle;
+}
